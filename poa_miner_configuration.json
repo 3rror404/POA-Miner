@@ -1,0 +1,8 @@
+{
+  "url": "http://127.0.0.1:53573",
+  "userpass": "username:password",
+  "threads": "1",
+  "no-longpoll": true,
+  "no-stratum": true,
+  "quiet": true
+ }
