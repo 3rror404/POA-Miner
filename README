@@ -1,5 +1,5 @@
-This is a CPU Miner for POA Blocks on the Dapscoin Blockchain (https://github.com/DAPSCoin/DAPSCoin)
-
+This is forked from CPU Miner for POA Blocks on the Dapscoin Blockchain (https://github.com/DAPSCoin/DAPSCoin)
+Works with PRCY (https://github.com/PRCYCoin/PRCYCoin)
 
 Forked from Jeff Garzik's reference cpuminer. 
 
