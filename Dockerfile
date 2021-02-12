@@ -11,7 +11,7 @@ MAINTAINER      Guillaume J. Charmes <guillaume@charmes.net>
 RUN             apt-get update -qq && \
                 apt-get install -qqy automake libcurl4-openssl-dev git make gcc
 
-RUN             git clone https://github.com/pooler/cpuminer
+RUN             git clone https://github.com/PRCYCoin/POA-Miner.git -b develop --single-branch
 
 RUN             cd cpuminer && \
                 ./autogen.sh && \
