@@ -1,7 +1,8 @@
 /*
  * Copyright 2010 Jeff Garzik
  * Copyright 2012 Luke Dashjr
- * Copyright 2012-2017 pooler
+ * Copyright 2012-2020 pooler
+ * Copyright 2017 Pieter Wuille
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
@@ -37,21 +38,19 @@
 #include "miner.h"
 #include "elist.h"
 
-struct data_buffer {
-	void		*buf;
-	size_t		len;
-};
-
-struct upload_buffer {
-	const void	*buf;
-	size_t		len;
-	size_t		pos;
-};
 
 struct header_info {
 	char		*lp_path;
 	char		*reason;
 	char		*stratum_url;
+	size_t		content_length;
+};
+
+struct data_buffer {
+	void			*buf;
+	size_t			len;
+	size_t			allocated;
+	struct header_info	*headers;
 };
 
 struct tq_ent {
@@ -187,64 +186,50 @@ static size_t all_data_cb(const void *ptr, size_t size, size_t nmemb,
 {
 	struct data_buffer *db = user_data;
 	size_t len = size * nmemb;
-	size_t oldlen, newlen;
+	size_t newalloc, reqalloc;
 	void *newmem;
 	static const unsigned char zero = 0;
-
-	oldlen = db->len;
-	newlen = oldlen + len;
-
-	newmem = realloc(db->buf, newlen + 1);
-	if (!newmem)
-		return 0;
-
-	db->buf = newmem;
-	db->len = newlen;
-	memcpy(db->buf + oldlen, ptr, len);
-	memcpy(db->buf + newlen, &zero, 1);	/* null terminate */
-
-	return len;
-}
-
-static size_t upload_data_cb(void *ptr, size_t size, size_t nmemb,
-			     void *user_data)
-{
-	struct upload_buffer *ub = user_data;
-	int len = size * nmemb;
-
-	if (len > ub->len - ub->pos)
-		len = ub->len - ub->pos;
-
-	if (len) {
-		memcpy(ptr, ub->buf + ub->pos, len);
-		ub->pos += len;
-	}
-
-	return len;
-}
-
-#if LIBCURL_VERSION_NUM >= 0x071200
-static int seek_data_cb(void *user_data, curl_off_t offset, int origin)
-{
-	struct upload_buffer *ub = user_data;
+	static const size_t max_realloc_increase = 8 * 1024 * 1024;
+	static const size_t initial_alloc = 16 * 1024;
 	
-	switch (origin) {
-	case SEEK_SET:
-		ub->pos = offset;
-		break;
-	case SEEK_CUR:
-		ub->pos += offset;
-		break;
-	case SEEK_END:
-		ub->pos = ub->len + offset;
-		break;
-	default:
-		return 1; /* CURL_SEEKFUNC_FAIL */
+	/* minimum required allocation size */
+	reqalloc = db->len + len + 1;
+
+	if (reqalloc > db->allocated) {
+		if (db->len > 0) {
+			newalloc = db->allocated * 2;
+		} else {
+			if (db->headers->content_length > 0)
+				newalloc = db->headers->content_length + 1;
+			else
+				newalloc = initial_alloc;
+		}
+
+		if (db->headers->content_length == 0) {
+			/* limit the maximum buffer increase */
+			if (newalloc - db->allocated > max_realloc_increase)
+				newalloc = db->allocated + max_realloc_increase;
+		}
+
+		/* ensure we have a big enough allocation */
+		if (reqalloc > newalloc)
+			newalloc = reqalloc;
+
+		newmem = realloc(db->buf, newalloc);
+		if (!newmem)
+			return 0;
+
+		db->buf = newmem;
+		db->allocated = newalloc;
 	}
 
-	return 0; /* CURL_SEEKFUNC_OK */
+	memcpy(db->buf + db->len, ptr, len); /* append new data */
+	memcpy(db->buf + db->len + len, &zero, 1); /* null terminate */
+
+	db->len += len;
+
+	return len;
 }
-#endif
 
 static size_t resp_hdr_cb(void *ptr, size_t size, size_t nmemb, void *user_data)
 {
@@ -296,6 +281,9 @@ static size_t resp_hdr_cb(void *ptr, size_t size, size_t nmemb, void *user_data)
 		hi->stratum_url = val;	/* steal memory reference */
 		val = NULL;
 	}
+
+	if (!strcasecmp("Content-Length", key))
+		hi->content_length = strtoul(val, NULL, 10);
 
 out:
 	free(key);
@@ -355,15 +343,14 @@ json_t *json_rpc_call(CURL *curl, const char *url,
 	int rc;
 	long http_rc;
 	struct data_buffer all_data = {0};
-	struct upload_buffer upload_data;
 	char *json_buf;
 	json_error_t err;
 	struct curl_slist *headers = NULL;
-	char len_hdr[64];
 	char curl_err_str[CURL_ERROR_SIZE];
 	long timeout = (flags & JSON_RPC_LONGPOLL) ? opt_timeout : 30;
 	struct header_info hi = {0};
 
+	all_data.headers = &hi;
 	/* it is assumed that 'curl' is freshly [re]initialized at this pt */
 
 	if (opt_protocol)
@@ -377,12 +364,6 @@ json_t *json_rpc_call(CURL *curl, const char *url,
 	curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, all_data_cb);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &all_data);
-	curl_easy_setopt(curl, CURLOPT_READFUNCTION, upload_data_cb);
-	curl_easy_setopt(curl, CURLOPT_READDATA, &upload_data);
-#if LIBCURL_VERSION_NUM >= 0x071200
-	curl_easy_setopt(curl, CURLOPT_SEEKFUNCTION, &seek_data_cb);
-	curl_easy_setopt(curl, CURLOPT_SEEKDATA, &upload_data);
-#endif
 	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_err_str);
 	if (opt_redirect)
 		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
@@ -401,19 +382,12 @@ json_t *json_rpc_call(CURL *curl, const char *url,
 	if (flags & JSON_RPC_LONGPOLL)
 		curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, sockopt_keepalive_cb);
 #endif
-	curl_easy_setopt(curl, CURLOPT_POST, 1);
+	curl_easy_setopt(curl, CURLOPT_POSTFIELDS, rpc_req);
 
 	if (opt_protocol)
 		applog(LOG_DEBUG, "JSON protocol request:\n%s\n", rpc_req);
 
-	upload_data.buf = rpc_req;
-	upload_data.len = strlen(rpc_req);
-	upload_data.pos = 0;
-	sprintf(len_hdr, "Content-Length: %lu",
-		(unsigned long) upload_data.len);
-
 	headers = curl_slist_append(headers, "Content-Type: application/json");
-	headers = curl_slist_append(headers, len_hdr);
 	headers = curl_slist_append(headers, "User-Agent: " USER_AGENT);
 	headers = curl_slist_append(headers, "X-Mining-Extensions: midstate");
 	headers = curl_slist_append(headers, "Accept:"); /* disable Accept hdr*/
@@ -534,29 +508,42 @@ char *abin2hex(const unsigned char *p, size_t len)
 
 bool hex2bin(unsigned char *p, const char *hexstr, size_t len)
 {
-	char hex_byte[3];
-	char *ep;
+	if(hexstr == NULL)
+		return false;
 
-	hex_byte[2] = '\0';
-
-	while (*hexstr && len) {
-		if (!hexstr[1]) {
-			applog(LOG_ERR, "hex2bin str truncated");
-			return false;
-		}
-		hex_byte[0] = hexstr[0];
-		hex_byte[1] = hexstr[1];
-		*p = (unsigned char) strtol(hex_byte, &ep, 16);
-		if (*ep) {
-			applog(LOG_ERR, "hex2bin failed on '%s'", hex_byte);
-			return false;
-		}
-		p++;
-		hexstr += 2;
-		len--;
+	size_t hexstr_len = strlen(hexstr);
+	if((hexstr_len % 2) != 0) {
+		applog(LOG_ERR, "hex2bin str truncated");
+		return false;
 	}
 
-	return (len == 0 && *hexstr == 0) ? true : false;
+	size_t bin_len = hexstr_len / 2;
+	if (bin_len > len) {
+		applog(LOG_ERR, "hex2bin buffer too small");
+		return false;
+	}
+
+	memset(p, 0, len);
+
+	size_t i = 0;
+	while (i < hexstr_len) {
+		char c = hexstr[i];
+		unsigned char nibble;
+		if(c >= '0' && c <= '9') {
+			nibble = (c - '0');
+		} else if (c >= 'A' && c <= 'F') {
+			nibble = (10 + (c - 'A'));
+		} else if (c >= 'a' && c <= 'f') {
+			nibble = (10 + (c - 'a'));
+		} else {
+			applog(LOG_ERR, "hex2bin invalid hex");
+			return false;
+		}
+		p[(i / 2)] |= (nibble << ((1 - (i % 2)) * 4));
+		i++;
+	}
+
+	return true;
 }
 
 int varint_encode(unsigned char *p, uint64_t n)
@@ -658,6 +645,136 @@ static int b58check(unsigned char *bin, size_t binsz, const char *b58)
 	return bin[0];
 }
 
+static uint32_t bech32_polymod_step(uint32_t pre) {
+	uint8_t b = pre >> 25;
+	return ((pre & 0x1FFFFFF) << 5) ^
+		(-((b >> 0) & 1) & 0x3b6a57b2UL) ^
+		(-((b >> 1) & 1) & 0x26508e6dUL) ^
+		(-((b >> 2) & 1) & 0x1ea119faUL) ^
+		(-((b >> 3) & 1) & 0x3d4233ddUL) ^
+		(-((b >> 4) & 1) & 0x2a1462b3UL);
+}
+
+static const int8_t bech32_charset_rev[128] = {
+	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+	15, -1, 10, 17, 21, 20, 26, 30,  7,  5, -1, -1, -1, -1, -1, -1,
+	-1, 29, -1, 24, 13, 25,  9,  8, 23, -1, 18, 22, 31, 27, 19, -1,
+	 1,  0,  3, 16, 11, 28, 12, 14,  6,  4,  2, -1, -1, -1, -1, -1,
+	-1, 29, -1, 24, 13, 25,  9,  8, 23, -1, 18, 22, 31, 27, 19, -1,
+	 1,  0,  3, 16, 11, 28, 12, 14,  6,  4,  2, -1, -1, -1, -1, -1
+};
+
+static bool bech32_decode(char *hrp, uint8_t *data, size_t *data_len, const char *input) {
+	uint32_t chk = 1;
+	size_t i;
+	size_t input_len = strlen(input);
+	size_t hrp_len;
+	int have_lower = 0, have_upper = 0;
+	if (input_len < 8 || input_len > 90) {
+		return false;
+	}
+	*data_len = 0;
+	while (*data_len < input_len && input[(input_len - 1) - *data_len] != '1') {
+		++(*data_len);
+	}
+	hrp_len = input_len - (1 + *data_len);
+	if (1 + *data_len >= input_len || *data_len < 6) {
+		return false;
+	}
+	*(data_len) -= 6;
+	for (i = 0; i < hrp_len; ++i) {
+		int ch = input[i];
+		if (ch < 33 || ch > 126) {
+			return false;
+		}
+		if (ch >= 'a' && ch <= 'z') {
+			have_lower = 1;
+		} else if (ch >= 'A' && ch <= 'Z') {
+			have_upper = 1;
+			ch = (ch - 'A') + 'a';
+		}
+		hrp[i] = ch;
+		chk = bech32_polymod_step(chk) ^ (ch >> 5);
+	}
+	hrp[i] = 0;
+	chk = bech32_polymod_step(chk);
+	for (i = 0; i < hrp_len; ++i) {
+		chk = bech32_polymod_step(chk) ^ (input[i] & 0x1f);
+	}
+	++i;
+	while (i < input_len) {
+		int v = (input[i] & 0x80) ? -1 : bech32_charset_rev[(int)input[i]];
+		if (input[i] >= 'a' && input[i] <= 'z') have_lower = 1;
+		if (input[i] >= 'A' && input[i] <= 'Z') have_upper = 1;
+		if (v == -1) {
+			return false;
+		}
+		chk = bech32_polymod_step(chk) ^ v;
+		if (i + 6 < input_len) {
+			data[i - (1 + hrp_len)] = v;
+		}
+		++i;
+	}
+	if (have_lower && have_upper) {
+		return false;
+	}
+	return chk == 1;
+}
+
+static bool convert_bits(uint8_t *out, size_t *outlen, int outbits, const uint8_t *in, size_t inlen, int inbits, int pad) {
+	uint32_t val = 0;
+	int bits = 0;
+	uint32_t maxv = (((uint32_t)1) << outbits) - 1;
+	while (inlen--) {
+		val = (val << inbits) | *(in++);
+		bits += inbits;
+		while (bits >= outbits) {
+			bits -= outbits;
+			out[(*outlen)++] = (val >> bits) & maxv;
+		}
+	}
+	if (pad) {
+		if (bits) {
+			out[(*outlen)++] = (val << (outbits - bits)) & maxv;
+		}
+	} else if (((val << (outbits - bits)) & maxv) || bits >= inbits) {
+		return false;
+	}
+	return true;
+}
+
+static bool segwit_addr_decode(int *witver, uint8_t *witdata, size_t *witdata_len, const char *addr) {
+	uint8_t data[84];
+	char hrp_actual[84];
+	size_t data_len;
+	if (!bech32_decode(hrp_actual, data, &data_len, addr)) return false;
+	if (data_len == 0 || data_len > 65) return false;
+	if (data[0] > 16) return false;
+	*witdata_len = 0;
+	if (!convert_bits(witdata, witdata_len, 8, data + 1, data_len - 1, 5, 0)) return false;
+	if (*witdata_len < 2 || *witdata_len > 40) return false;
+	if (data[0] == 0 && *witdata_len != 20 && *witdata_len != 32) return false;
+	*witver = data[0];
+	return true;
+}
+
+static size_t bech32_to_script(uint8_t *out, size_t outsz, const char *addr) {
+	uint8_t witprog[40];
+	size_t witprog_len;
+	int witver;
+
+	if (!segwit_addr_decode(&witver, witprog, &witprog_len, addr))
+		return 0;
+	if (outsz < witprog_len + 2)
+		return 0;
+	out[0] = witver ? (0x50 + witver) : 0;
+	out[1] = witprog_len;
+	memcpy(out + 2, witprog, witprog_len);
+	return witprog_len + 2;
+}
+
 size_t address_to_script(unsigned char *out, size_t outsz, const char *addr)
 {
 	unsigned char addrbin[25];
@@ -665,7 +782,7 @@ size_t address_to_script(unsigned char *out, size_t outsz, const char *addr)
 	size_t rv;
 
 	if (!b58dec(addrbin, sizeof(addrbin), addr))
-		return 0;
+		return bech32_to_script(out, outsz, addr);
 	addrver = b58check(addrbin, sizeof(addrbin), addr);
 	if (addrver < 0)
 		return 0;
@@ -932,7 +1049,7 @@ out:
 	return sret;
 }
 
-#if LIBCURL_VERSION_NUM >= 0x071101
+#if LIBCURL_VERSION_NUM >= 0x071101 && LIBCURL_VERSION_NUM < 0x072d00
 static curl_socket_t opensocket_grab_cb(void *clientp, curlsocktype purpose,
 	struct curl_sockaddr *addr)
 {
@@ -990,7 +1107,7 @@ bool stratum_connect(struct stratum_ctx *sctx, const char *url)
 #if LIBCURL_VERSION_NUM >= 0x070f06
 	curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, sockopt_keepalive_cb);
 #endif
-#if LIBCURL_VERSION_NUM >= 0x071101
+#if LIBCURL_VERSION_NUM >= 0x071101 && LIBCURL_VERSION_NUM < 0x072d00
 	curl_easy_setopt(curl, CURLOPT_OPENSOCKETFUNCTION, opensocket_grab_cb);
 	curl_easy_setopt(curl, CURLOPT_OPENSOCKETDATA, &sctx->sock);
 #endif
@@ -1004,7 +1121,9 @@ bool stratum_connect(struct stratum_ctx *sctx, const char *url)
 		return false;
 	}
 
-#if LIBCURL_VERSION_NUM < 0x071101
+#if LIBCURL_VERSION_NUM >= 0x072d00
+	curl_easy_getinfo(curl, CURLINFO_ACTIVESOCKET, &sctx->sock);
+#elif LIBCURL_VERSION_NUM < 0x071101
 	/* CURLINFO_LASTSOCKET is broken on Win64; only use it as a last resort */
 	curl_easy_getinfo(curl, CURLINFO_LASTSOCKET, (long *)&sctx->sock);
 #endif
