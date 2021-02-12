@@ -6,17 +6,17 @@
 #
 
 FROM            ubuntu:16.04
-MAINTAINER      Guillaume J. Charmes <guillaume@charmes.net>
+MAINTAINER      PRCYCoin <admin@prcycoin.com>
 
 RUN             apt-get update -qq && \
                 apt-get install -qqy automake libcurl4-openssl-dev git make gcc
 
 RUN             git clone https://github.com/PRCYCoin/POA-Miner.git -b develop --single-branch
 
-RUN             cd cpuminer && \
+RUN             cd POA-Miner && \
                 ./autogen.sh && \
                 ./configure CFLAGS="-O3" && \
                 make
 
-WORKDIR         /cpuminer
+WORKDIR         /POA-Miner
 ENTRYPOINT      ["./minerd"]
