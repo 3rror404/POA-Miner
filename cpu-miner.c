@@ -935,7 +935,7 @@ static bool gpoabt_work_decode(const json_t *val, struct work *work)
 	tx = malloc(tx_buf_size);
 	sha256d(merkle_tree[0], cbtx, cbtx_size);
 	//PoA block has only one transaction: the coinbase transaction
-	for (i = 0; i < tx_count; i++) {
+	/*for (i = 0; i < tx_count; i++) {
 		tmp = json_array_get(txa, i);
 		const char *tx_hex = json_string_value(json_object_get(tmp, "data"));
 		const int tx_size = tx_hex ? strlen(tx_hex) / 2 : 0;
@@ -974,7 +974,7 @@ static bool gpoabt_work_decode(const json_t *val, struct work *work)
 		n /= 2;
 		for (i = 0; i < n; i++)
 			sha256d(merkle_tree[i], merkle_tree[2*i], 64);
-	}
+	}*/
 
 	/* assemble block header */
 	work->data[0] = swab32(version);
