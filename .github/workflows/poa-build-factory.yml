@@ -137,7 +137,7 @@ jobs:
       working-directory: ${{ env.SOURCE_ARTIFACT }}
     - name: Install Required Packages
       run: |
-        brew install automake openssl zlib curl jansson make
+        brew install automake zlib jansson make
     - name: Build POA Miner 
       run: |
         ./autogen.sh
