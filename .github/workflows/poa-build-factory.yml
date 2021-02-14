@@ -106,3 +106,39 @@ jobs:
       with:
         name: ${{ env.ARTIFACT_DIR }}
         path: ${{ env.ARTIFACT_DIR }}
+  build-mac:
+    name: Build for Mac
+    needs: create-source-distribution
+    runs-on: macos-10.15
+    env:
+      ARTIFACT_DIR: poaminer-mac
+    steps:
+    - name: Getting Source
+      uses: actions/download-artifact@v1
+      with:
+        name: ${{ env.SOURCE_ARTIFACT }}
+    - name: Extract Archives
+      run: |
+        tar -xzf poaminer.tar.gz --strip-components=1
+      working-directory: ${{ env.SOURCE_ARTIFACT }}
+    - name: Install Required Packages
+      run: |
+        brew install automake openssl zlib curl jansson make
+    - name: Build POA Miner 
+      run: |
+        ./autogen.sh
+        ./nomacro.pl
+        ./configure CFLAGS="-march=native"
+        make -j$(nproc)
+      working-directory: ${{ env.SOURCE_ARTIFACT }}
+    - name: Prepare Files for Artifact
+      run: |
+        mkdir -p $ARTIFACT_DIR
+        strip $SOURCE_ARTIFACT/minerd
+        chmod +x $SOURCE_ARTIFACT/minerd
+        mv $SOURCE_ARTIFACT/minerd $ARTIFACT_DIR
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: ${{ env.ARTIFACT_DIR }}
+        path: ${{ env.ARTIFACT_DIR }}
