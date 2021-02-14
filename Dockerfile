@@ -11,7 +11,7 @@ MAINTAINER      PRCYCoin <admin@prcycoin.com>
 RUN             apt-get update -qq && \
                 apt-get install -qqy automake libcurl4-openssl-dev git make gcc
 
-RUN             git clone https://github.com/PRCYCoin/POA-Miner.git -b master --single-branch
+RUN             git clone https://github.com/PRCYCoin/POA-Miner.git -b develop --single-branch
 
 RUN             cd POA-Miner && \
                 ./autogen.sh && \
