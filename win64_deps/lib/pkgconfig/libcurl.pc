@@ -23,7 +23,7 @@
 # This should most probably benefit from getting a "Requires:" field added
 # dynamically by configure.
 #
-prefix=/root/POA-Miner/win64_deps
+prefix=/home/runner/work/POA-Miner/POA-Miner/source/win64_deps
 exec_prefix=${prefix}
 libdir=${exec_prefix}/lib
 includedir=${prefix}/include
