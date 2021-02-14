@@ -88,12 +88,27 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y g++-mingw-w64-x86-64 gcc-mingw-w64-x86-64
+
     - name: Switch MinGW GCC and G++ to POSIX Threading
       run: |
         sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
         sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
     - name: Build POA Miner
       run: |
+        wget -N https://curl.haxx.se/download/curl-7.40.0.tar.gz && tar xzf curl-7.40.0.tar.gz
+        wget -N https://sourceware.org/pub/pthreads-win32/pthreads-w32-2-9-1-release.tar.gz && tar xzf pthreads-w32-2-9-1-release.tar.gz
+        DEPS="/ /home/runner/POA-Miner/win64_deps"
+        DESTDIR=${DEPS}
+        cd curl-7.40.0
+        ./configure --with-winssl --enable-static --prefix=/ --host=x86_64-w64-mingw32 --disable-shared
+        make
+        make install
+        cd ../pthreads-w32-2-9-1-release/
+        cp config.h pthreads_win32_config.h
+        make -f GNUmakefile CROSS="x86_64-w64-mingw32-" clean GC-static
+        cp libpthreadGC2.a ${DEPS}/lib/libpthread.a
+        cp pthread.h semaphore.h sched.h ${DEPS}/include
+        cd..
         ./build.sh
       working-directory: ${{ env.SOURCE_ARTIFACT }}
     - name: Prepare Files for Artifact
