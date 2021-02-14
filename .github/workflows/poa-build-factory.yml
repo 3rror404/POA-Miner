@@ -102,7 +102,6 @@ jobs:
         cd curl-7.40.0
         ./configure --with-winssl --enable-static --prefix=/ --host=x86_64-w64-mingw32 --disable-shared
         make
-        make install
         cd ../pthreads-w32-2-9-1-release/
         cp config.h pthreads_win32_config.h
         make -f GNUmakefile CROSS="x86_64-w64-mingw32-" clean GC-static
