@@ -18,7 +18,7 @@ jobs:
     - name: Install Required Packages
       run: |
         sudo apt-get update
-        sudo apt-get install automake libcurl4-openssl-dev git make gcc
+        sudo apt-get install automake git make gcc
     - name: Create Distribution Tarball
       run: |
         mkdir -p $ARTIFACT_DIR
@@ -48,6 +48,10 @@ jobs:
       run: |
         tar -xzf poaminer.tar.gz --strip-components=1
       working-directory: ${{ env.SOURCE_ARTIFACT }}
+    - name: Install Required Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libcurl4-openssl-dev
     - name: Build POA Miner 
       run: |
         ./autogen.sh
