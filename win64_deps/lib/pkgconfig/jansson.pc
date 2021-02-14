@@ -1,4 +1,4 @@
-prefix=/root/POA-Miner/win64_deps
+prefix=/home/runner/work/POA-Miner/POA-Miner/source/win64_deps
 exec_prefix=${prefix}
 libdir=${exec_prefix}/lib
 includedir=${prefix}/include
