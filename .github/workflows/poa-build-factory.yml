@@ -63,7 +63,7 @@ jobs:
         mkdir -p $ARTIFACT_DIR
         strip $SOURCE_ARTIFACT/minerd
         chmod +x $SOURCE_ARTIFACT/minerd
-        mv $SOURCE_ARTIFACT/minerd $ARTIFACT_DIR
+        mv $SOURCE_ARTIFACT/minerd $ARTIFACT_DIR/prcycoin-poa-minerd
     - name: Upload Artifact
       uses: actions/upload-artifact@v1
       with:
@@ -110,7 +110,7 @@ jobs:
       run: |
         mkdir -p $ARTIFACT_DIR
         strip $SOURCE_ARTIFACT/minerd.exe
-        mv $SOURCE_ARTIFACT/minerd.exe $ARTIFACT_DIR
+        mv $SOURCE_ARTIFACT/minerd.exe $ARTIFACT_DIR/prcycoin-poa-minerd.exe
     - name: Upload Artifact
       uses: actions/upload-artifact@v1
       with:
@@ -146,7 +146,7 @@ jobs:
         mkdir -p $ARTIFACT_DIR
         strip $SOURCE_ARTIFACT/minerd
         chmod +x $SOURCE_ARTIFACT/minerd
-        mv $SOURCE_ARTIFACT/minerd $ARTIFACT_DIR
+        mv $SOURCE_ARTIFACT/minerd $ARTIFACT_DIR/prcycoin-poa-minerd
     - name: Upload Artifact
       uses: actions/upload-artifact@v1
       with:
