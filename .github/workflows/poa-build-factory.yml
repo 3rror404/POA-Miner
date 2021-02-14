@@ -107,7 +107,7 @@ jobs:
         make -f GNUmakefile CROSS="x86_64-w64-mingw32-" clean GC-static
         cp libpthreadGC2.a ${DEPS}/lib/libpthread.a
         cp pthread.h semaphore.h sched.h ${DEPS}/include
-        cd..
+        cd /home/runner/work/POA-Miner/POA-Miner/source
         ./build.sh
       working-directory: ${{ env.SOURCE_ARTIFACT }}
     - name: Prepare Files for Artifact
