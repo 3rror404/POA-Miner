@@ -94,9 +94,7 @@ jobs:
         sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
     - name: Build POA Miner
       run: |
-        ./autogen.sh
-        ./configure
-        make -j$(nproc)
+        ./build.sh
       working-directory: ${{ env.SOURCE_ARTIFACT }}
     - name: Prepare Files for Artifact
       run: |
