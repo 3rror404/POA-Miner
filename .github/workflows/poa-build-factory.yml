@@ -61,9 +61,9 @@ jobs:
     - name: Prepare Files for Artifact
       run: |
         mkdir -p $ARTIFACT_DIR
-        strip $SOURCE_ARTIFACT/{minerd}
-        chmod +x $SOURCE_ARTIFACT/{minerd}
-        mv $SOURCE_ARTIFACT/{minerd} $ARTIFACT_DIR
+        strip $SOURCE_ARTIFACT/minerd
+        chmod +x $SOURCE_ARTIFACT/minerd
+        mv $SOURCE_ARTIFACT/minerd $ARTIFACT_DIR
     - name: Upload Artifact
       uses: actions/upload-artifact@v1
       with:
