@@ -153,6 +153,10 @@ static unsigned long accepted_count = 0L;
 static unsigned long rejected_count = 0L;
 static double *thr_hashrates;
 
+static bool is_mining = false;
+static char *opt_mining_start_script;
+static char *opt_mining_stop_script;
+
 #ifdef HAVE_GETOPT_LONG
 #include <getopt.h>
 #else
@@ -192,7 +196,9 @@ Options:\n\
       --no-redirect     ignore requests to change the URL of the mining server\n\
   -q, --quiet           disable per-thread hashmeter output\n\
   -D, --debug           enable debug output\n\
-  -P, --protocol-dump   verbose dump of protocol-level activities\n"
+  -P, --protocol-dump   verbose dump of protocol-level activities\n\
+  -A, --start-script	bash command that should be executed when mining starts\n\
+  -Z, --stop-script		bash command that should be executed when mining stops\n"
 #ifdef HAVE_SYSLOG_H
 "\
   -S, --syslog          use system log for output messages\n"
@@ -240,6 +246,8 @@ static struct option const options[] = {
 	{ "retries", 1, NULL, 'r' },
 	{ "retry-pause", 1, NULL, 'R' },
 	{ "scantime", 1, NULL, 's' },
+	{ "start-script", 1, NULL, 'A' },
+	{ "stop-script", 1, NULL, 'Z' },
 #ifdef HAVE_SYSLOG_H
 	{ "syslog", 0, NULL, 'S' },
 #endif
@@ -1307,6 +1315,24 @@ static bool workio_get_work(struct workio_cmd *wc, CURL *curl)
 			return false;
 		}
 
+		/* run the defined bash script if we have finished mining */
+		if (is_mining) {
+			is_mining = false;
+
+			if ((opt_mining_stop_script != NULL) && (opt_mining_stop_script[0] != '\0')) {
+				char *buff = malloc(strlen(opt_mining_stop_script) + 4);
+				strcpy(buff, opt_mining_stop_script);
+				strcat(buff, " &"); /* append & to prevent waiting for script to execute */
+
+				applog(LOG_ERR, "Executing script: %s", buff);
+
+				int a = system(buff);
+
+				free(buff);
+				
+			}
+		}
+
 		/* pause, then restart work-request loop */
 		applog(LOG_ERR, "json_rpc_call failed, retry after %d seconds",
 			opt_fail_pause);
@@ -1316,6 +1342,24 @@ static bool workio_get_work(struct workio_cmd *wc, CURL *curl)
 	/* send work to requesting thread */
 	if (!tq_push(wc->thr->q, ret_work))
 		free(ret_work);
+
+	/* run the defined bash script if we have finished mining */
+	if (!is_mining) {
+		is_mining = true;
+
+		if ((opt_mining_start_script != NULL) && (opt_mining_start_script[0] != '\0')) {
+			char *buff = malloc(strlen(opt_mining_start_script) + 4);
+			strcpy(buff, opt_mining_start_script);
+			strcat(buff, " &"); /* append & to prevent waiting for script to execute */
+
+			applog(LOG_ERR, "Executing script: %s", buff);
+
+			int a = system(buff);
+
+			free(buff);
+
+		}
+	}	
 
 	return true;
 }
@@ -1948,6 +1992,16 @@ static void parse_arg(int key, char *arg, char *pname)
 	int v, i;
 
 	switch(key) {
+	case 'A':
+		free(opt_mining_start_script);
+		opt_mining_start_script = strdup(arg);
+		strhide(arg);
+		break;
+	case 'Z':
+		free(opt_mining_stop_script);
+		opt_mining_stop_script = strdup(arg);
+		strhide(arg);
+		break;
 	case 'a':
 		for (i = 0; i < ARRAY_SIZE(algo_names); i++) {
 			v = strlen(algo_names[i]);

@@ -1,3 +1,21 @@
+![Github Actions CI for PoA Miner](https://github.com/PRCYCoin/POA-Miner/workflows/Github%20Actions%20CI%20for%20PoA%20Miner/badge.svg?branch=master)
+
+```
+
+{
+  "url": "http://127.0.0.1:59683",
+  "userpass": "username:password",
+  "threads": "1",
+  "no-longpoll": true,
+  "no-stratum": true,
+  "quiet": true,
+  "start-script": "pkt_mining_stop.sh", /* NEW */
+  "stop-script": "pkt_mining_start.sh"  /* NEW 
+ }
+
+"start-script" Path to a bash script executed when the PoA miner begins auditing.
+"stop-script" Path to a bash script executed when the PoA miner ends auditing.
+
 This is forked from CPU Miner for POA Blocks on the Dapscoin Blockchain (https://github.com/DAPSCoin/DAPSCoin)
 Works with PRCY (https://github.com/PRCYCoin/PRCYCoin)
 
@@ -71,3 +89,4 @@ and all_proxy environment variables.
 Also many issues and FAQs are covered in the forum thread
 dedicated to this program,
 	https://bitcointalk.org/index.php?topic=55038.0
+```
