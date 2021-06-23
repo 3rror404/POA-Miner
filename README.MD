@@ -2,6 +2,8 @@
 
 ```
 
+## Utilize your CPU 100% of the time.
+
 {
   "url": "http://127.0.0.1:59683",
   "userpass": "username:password",
@@ -9,12 +11,14 @@
   "no-longpoll": true,
   "no-stratum": true,
   "quiet": true,
-  "start-script": "pkt_mining_stop.sh", /* NEW */
-  "stop-script": "pkt_mining_start.sh"  /* NEW 
+  "start-script": "mining_started.sh", /* NEW */
+  "stop-script": "mining_stopped.sh"  /* NEW 
  }
 
 "start-script" Path to a bash script executed when the PoA miner begins auditing.
 "stop-script" Path to a bash script executed when the PoA miner ends auditing.
+
+---
 
 This is forked from CPU Miner for POA Blocks on the Dapscoin Blockchain (https://github.com/DAPSCoin/DAPSCoin)
 Works with PRCY (https://github.com/PRCYCoin/PRCYCoin)
